@@ -27,6 +27,7 @@ checkpoints/
 .DS_Store
 .vscode/
 .idea/
+.claude/
 
 # credentials
 kaggle.json

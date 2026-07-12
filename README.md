@@ -64,10 +64,10 @@ scripts/submit.sh submissions/my_submission.csv "short description of the approa
 
 | Date | Who | Approach | CV score | Public LB | Notes |
 |------|-----|----------|----------|-----------|-------|
-|      |     |          |          |           |       |
+| 2026-07-12 | André (w/ Claude) | Median impute -> RobustScaler -> VarianceThreshold -> SelectKBest(f_regression, k=100) -> IsolationForest outlier removal -> GradientBoostingRegressor | R²=0.57 (5-fold CV) | not yet submitted | Baseline; see `src/baseline.py`. Ridge got 0.32, RandomForest 0.50 without outlier removal. |
 
 ## Current best
 
-- Approach:
-- CV score:
-- Public LB score:
+- Approach: GradientBoostingRegressor on IsolationForest-cleaned, SelectKBest-100 features (`src/baseline.py`)
+- CV score: R²=0.57 (5-fold)
+- Public LB score: not yet submitted

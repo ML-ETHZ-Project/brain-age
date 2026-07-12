@@ -5,3 +5,5 @@ matplotlib
 jupyter
 ipykernel
 kaggle
+xgboost
+lightgbm
