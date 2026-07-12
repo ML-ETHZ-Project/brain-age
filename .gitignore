@@ -1,6 +1,12 @@
 # data & submissions
 data/*
 !data/.gitkeep
+!data/raw
+!data/processed
+data/raw/*
+!data/raw/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
 submissions/*
 !submissions/.gitkeep
 
@@ -21,3 +27,7 @@ checkpoints/
 .DS_Store
 .vscode/
 .idea/
+
+# credentials
+kaggle.json
+.env
