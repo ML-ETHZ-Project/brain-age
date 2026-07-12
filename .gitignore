@@ -1,0 +1,23 @@
+# data & submissions
+data/*
+!data/.gitkeep
+submissions/*
+!submissions/.gitkeep
+
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.ipynb_checkpoints/
+
+# models / checkpoints
+*.pkl
+*.pt
+*.h5
+checkpoints/
+
+# os / editor
+.DS_Store
+.vscode/
+.idea/
