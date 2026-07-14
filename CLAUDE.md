@@ -29,7 +29,12 @@ The organizers deliberately corrupted the FreeSurfer features in three ways — 
 before regressing:
 
 1. **Missing values**: ~7.6% of all cells are NaN, spread across every column and every row (no
-   row or column is NaN-free). Must impute (median is robust and simple; do NOT drop rows/cols).
+   row or column is NaN-free). Must impute (do NOT drop rows/cols). `notebooks/impute_comparison.py`
+   benchmarks mean/median/most_frequent/KNN/iterative imputation with the rest of the pipeline
+   held fixed: median wins (CV R²=0.5065), narrowly ahead of mean (0.5028); KNN (0.4968) and
+   iterative/MICE (0.4948) don't pay for their extra complexity at this sample size (1212 rows)
+   and with ~300 near-irrelevant columns; most_frequent is worst (0.4639), as expected for
+   continuous measurements. Stick with median unless the dataset or downstream pipeline changes.
 2. **Irrelevant/noise features**: a handful of columns (e.g. `x665`, `x173`, `x596` in the original
    EDA) have insane magnitudes (std up to ~1e22) — clearly injected noise, not real anatomical
    measurements. A few columns are also constant (zero variance, e.g. `x104`, `x129`, `x489`,

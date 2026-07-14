@@ -65,6 +65,7 @@ scripts/submit.sh submissions/my_submission.csv "short description of the approa
 | Date | Who | Approach | CV score | Public LB | Notes |
 |------|-----|----------|----------|-----------|-------|
 | 2026-07-12 | André (w/ Claude) | Median impute -> RobustScaler -> VarianceThreshold -> SelectKBest(f_regression, k=100) -> IsolationForest outlier removal -> GradientBoostingRegressor | R²=0.57 (5-fold CV) | not yet submitted | Baseline; see `src/baseline.py`. Ridge got 0.32, RandomForest 0.50 without outlier removal. |
+| 2026-07-14 | André (w/ Claude) | Subtask 0 ablation: imputer choice (mean/median/most_frequent/KNN/iterative), rest of pipeline fixed | median best: R²=0.5065; mean 0.5028; KNN 0.4968; iterative 0.4948; most_frequent 0.4639 | n/a (ablation) | See `notebooks/impute_comparison.py`. Confirms median impute in `src/baseline.py` is the right call; fancier imputers don't pay off at n=1212 with ~300 noisy/irrelevant columns. |
 
 ## Current best
 
