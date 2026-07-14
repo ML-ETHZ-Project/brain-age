@@ -42,8 +42,8 @@ before regressing:
    (median/IQR-based, so huge-scale noise columns don't blow up distance/gradient-based models)
    and a feature-selection step (`VarianceThreshold` + `SelectKBest`) before modeling.
 3. **Outliers**: some training rows are outlier subjects, not just outlier feature values. Task
-   spec explicitly requires an outlier-detection step (classify each training row as outlier/not)
-   before fitting the regressor — e.g. `IsolationForest` on the imputed/scaled features.
+   spec requires classifying each training row as outlier/not — but see below, this classification
+   should NOT be used to filter the regressor's training data.
 
 Column indices/names above may shift if the dataset is regenerated — re-run `notebooks/eda.py`
 rather than trusting hardcoded names blindly.
@@ -51,16 +51,34 @@ rather than trusting hardcoded names blindly.
 ## Pipeline stages (matches the assignment's required subtasks)
 
 1. Impute missing values (train+test, fit imputer on train only).
-2. Outlier detection on training rows → exclude flagged rows from regressor fitting.
+2. Outlier detection on training rows → classify as a standalone artifact (subtask deliverable),
+   but do NOT use it to filter the regressor's training data — see below, it hurts R².
 3. Feature selection → label features selected/unselected (drop irrelevant + redundant).
 4. Regression → predict age, evaluate with R² via cross-validation on held-out folds.
 
 Always fit preprocessing (imputer, scaler, selector, outlier detector) on **training data only**,
-then `.transform()` the test set — never fit on test data or leak test rows into fitting.
+then `.transform()` the test set — never fit on test data or leak test rows into fitting. This
+also means: when validating whether a step (outlier removal, an imputer choice, etc.) helps,
+fit that step *inside* each CV fold on that fold's training rows only. Fitting it on the full
+training set before splitting into folds leaks validation-row information into the decision and
+inflates the reported R² — this bit us once already (see outlier removal below) so double-check
+new ablations don't repeat it.
 
 Current baseline (`src/baseline.py`): median impute → RobustScaler → VarianceThreshold →
-SelectKBest(f_regression, k=100) → IsolationForest outlier removal (train-only) →
-GradientBoostingRegressor, chosen by 5-fold CV against Ridge/RandomForest. ~0.57 CV R².
+SelectKBest(f_regression, k=100) → GradientBoostingRegressor, chosen by 5-fold CV against
+Ridge/RandomForest. ~0.5065 CV R².
+
+**Outlier removal was tried and rejected**: an earlier version filtered IsolationForest-flagged
+training rows before fitting the regressor, reporting ~0.57 CV R² — but that evaluation fit the
+preprocessor (including SelectKBest, which looks at `y`) and the outlier detector on the *entire*
+training set before splitting into CV folds, leaking validation-fold information into both feature
+selection and outlier detection. `notebooks/outlier_comparison.py` redid this leak-free (detector
+fit inside each fold, on that fold's training rows only) and found removal *hurts* at every
+contamination level tried (0.44-0.49 vs 0.5065 with no removal) — GradientBoostingRegressor is
+already robust to outliers, and dropping rows just loses training signal. The subtask still
+requires classifying training rows as outlier/not, so `src/baseline.py` produces that
+classification as a standalone artifact (`data/processed/outlier_labels.csv`, IsolationForest,
+contamination=0.05) without using it to filter what the regressor trains on.
 
 ## Working conventions
 

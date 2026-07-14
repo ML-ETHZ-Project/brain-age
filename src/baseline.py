@@ -1,9 +1,19 @@
 """Baseline pipeline for the Brain Age Prediction Kaggle competition.
 
 Stages: median-impute -> robust-scale -> variance/K-best feature selection
--> IsolationForest outlier removal (train only) -> regressor.
-Reports 5-fold CV R^2 for a few candidate regressors, picks the best, refits
-on the full (outlier-filtered) training set, and writes submissions/submission.csv.
+-> regressor. Reports 5-fold CV R^2 for a few candidate regressors, picks
+the best, refits on the full training set, and writes
+submissions/submission.csv.
+
+Outlier removal (subtask 1) is deliberately NOT used to filter the
+regressor's training data: notebooks/outlier_comparison.py validated it
+leak-free (fit the detector inside each CV fold, on training rows only)
+and found it *hurts* R^2 at every contamination level tried (0.44-0.49 vs
+0.5065 with no removal) -- GradientBoostingRegressor is already robust to
+outliers, and dropping rows just loses training signal. We still produce
+the required outlier classification as a standalone artifact
+(data/processed/outlier_labels.csv) since the subtask asks for a
+classification of training samples, not that they must be dropped.
 """
 import os
 
@@ -21,10 +31,12 @@ from sklearn.preprocessing import RobustScaler
 RANDOM_STATE = 42
 N_SPLITS = 5
 K_BEST = 100
+OUTLIER_CONTAMINATION = 0.05
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA_DIR = os.path.join(REPO_ROOT, "data", "raw")
 OUTPUT_DIR = os.path.join(REPO_ROOT, "submissions")
+PROCESSED_DIR = os.path.join(REPO_ROOT, "data", "processed")
 
 
 def load_data():
@@ -33,7 +45,13 @@ def load_data():
     X_test = pd.read_csv(os.path.join(DATA_DIR, "X_test.csv"))
 
     feat_cols = [c for c in X_train.columns if c != "id"]
-    return X_train[feat_cols].values, y_train["y"].values, X_test[feat_cols].values, X_test["id"].values
+    return (
+        X_train[feat_cols].values,
+        y_train["y"].values,
+        X_train["id"].values,
+        X_test[feat_cols].values,
+        X_test["id"].values,
+    )
 
 
 def build_preprocessor():
@@ -45,12 +63,22 @@ def build_preprocessor():
     ])
 
 
-def remove_outliers(X, y, contamination=0.05):
-    """Flag outlier rows in the training set with IsolationForest; return filtered X, y."""
+def classify_outliers(X_proc, train_ids, contamination=OUTLIER_CONTAMINATION):
+    """Subtask 1 deliverable: classify each training row as outlier/inlier.
+
+    Fit on the full preprocessed training set (fine here since this is a
+    reporting artifact, not something used to filter data fed to the
+    regressor -- see module docstring for why removal isn't used).
+    """
     iso = IsolationForest(contamination=contamination, random_state=RANDOM_STATE)
-    is_inlier = iso.fit_predict(X) == 1
-    print(f"  Outlier detection: flagged {(~is_inlier).sum()} / {len(y)} rows as outliers")
-    return X[is_inlier], y[is_inlier]
+    is_outlier = iso.fit_predict(X_proc) == -1
+    print(f"  Outlier classification: flagged {is_outlier.sum()} / {len(train_ids)} training rows as outliers")
+
+    os.makedirs(PROCESSED_DIR, exist_ok=True)
+    out_path = os.path.join(PROCESSED_DIR, "outlier_labels.csv")
+    pd.DataFrame({"id": train_ids, "is_outlier": is_outlier.astype(int)}).to_csv(out_path, index=False)
+    print(f"  Wrote {out_path}")
+    return is_outlier
 
 
 def evaluate_model(name, model, X, y):
@@ -62,10 +90,10 @@ def evaluate_model(name, model, X, y):
 
 
 def main():
-    X_train, y_train, X_test, test_ids = load_data()
+    X_train, y_train, train_ids, X_test, test_ids = load_data()
     print(f"Loaded: X_train {X_train.shape}, X_test {X_test.shape}")
 
-    print("\n--- Cross-validated R^2 WITHOUT outlier removal ---")
+    print("\n--- Cross-validated R^2 (leak-free: preprocessing fit per-fold) ---")
     candidates = {
         "Ridge(alpha=10)": Ridge(alpha=10.0, random_state=RANDOM_STATE),
         "RandomForest": RandomForestRegressor(n_estimators=300, max_depth=None, random_state=RANDOM_STATE, n_jobs=-1),
@@ -75,25 +103,20 @@ def main():
 
     best_name = max(scores, key=scores.get)
     print(f"\nBest model by CV R^2: {best_name} ({scores[best_name]:.4f})")
-
-    # Outlier removal happens on preprocessed features, then re-evaluate the winner.
-    print("\n--- Re-checking best model WITH training-set outlier removal ---")
-    prep = build_preprocessor()
-    X_train_proc = prep.fit_transform(X_train, y_train)
-    X_clean_proc, y_clean = remove_outliers(X_train_proc, y_train)
-    kf = KFold(n_splits=N_SPLITS, shuffle=True, random_state=RANDOM_STATE)
-    clean_scores = cross_val_score(candidates[best_name], X_clean_proc, y_clean, cv=kf, scoring="r2")
-    print(f"  {best_name} (outliers removed): R^2 = {clean_scores.mean():.4f} +/- {clean_scores.std():.4f}")
-
-    use_outlier_removal = clean_scores.mean() > scores[best_name]
-    print(f"\nUsing outlier removal for final fit: {use_outlier_removal}")
+    print(
+        "(Outlier removal was tried and validated leak-free in notebooks/outlier_comparison.py: "
+        "it hurts R^2 at every contamination level, so it is NOT used to filter training data here; "
+        "see module docstring.)"
+    )
 
     # Final fit on all available training data, predict on test set.
     final_prep = build_preprocessor()
     X_train_final = final_prep.fit_transform(X_train, y_train)
     y_train_final = y_train
-    if use_outlier_removal:
-        X_train_final, y_train_final = remove_outliers(X_train_final, y_train_final)
+
+    # Subtask 1 deliverable: classify (not remove) training-row outliers.
+    print("\n--- Subtask 1: outlier classification (reporting only, not used for training) ---")
+    classify_outliers(X_train_final, train_ids)
 
     final_model = candidates[best_name]
     final_model.fit(X_train_final, y_train_final)

@@ -64,11 +64,12 @@ scripts/submit.sh submissions/my_submission.csv "short description of the approa
 
 | Date | Who | Approach | CV score | Public LB | Notes |
 |------|-----|----------|----------|-----------|-------|
-| 2026-07-12 | André (w/ Claude) | Median impute -> RobustScaler -> VarianceThreshold -> SelectKBest(f_regression, k=100) -> IsolationForest outlier removal -> GradientBoostingRegressor | R²=0.57 (5-fold CV) | not yet submitted | Baseline; see `src/baseline.py`. Ridge got 0.32, RandomForest 0.50 without outlier removal. |
+| 2026-07-12 | André (w/ Claude) | ~~Median impute -> RobustScaler -> VarianceThreshold -> SelectKBest(f_regression, k=100) -> IsolationForest outlier removal -> GradientBoostingRegressor~~ | ~~R²=0.57 (5-fold CV)~~ | not submitted | **Superseded 2026-07-14**: the 0.57 came from a leaky evaluation (preprocessing + outlier detector fit on all training data before the CV split). See the 07-14 outlier-removal row below. |
 | 2026-07-14 | André (w/ Claude) | Subtask 0 ablation: imputer choice (mean/median/most_frequent/KNN/iterative), rest of pipeline fixed | median best: R²=0.5065; mean 0.5028; KNN 0.4968; iterative 0.4948; most_frequent 0.4639 | n/a (ablation) | See `notebooks/impute_comparison.py`. Confirms median impute in `src/baseline.py` is the right call; fancier imputers don't pay off at n=1212 with ~300 noisy/irrelevant columns. |
+| 2026-07-14 | André (w/ Claude) | Subtask 1 ablation, redone leak-free (detector fit inside each CV fold, not on full training set before splitting): IsolationForest (contamination 0.02-0.12) and LOF vs no removal | no removal wins: R²=0.5065; IsolationForest 0.44-0.48 across contaminations; LOF(c=0.05) 0.4928 | n/a (ablation) | See `notebooks/outlier_comparison.py`. Outlier removal actively hurts once leakage is fixed — GradientBoostingRegressor is already robust to outliers and dropping rows just loses signal. `src/baseline.py` no longer filters training rows; it still emits `data/processed/outlier_labels.csv` as the required classification artifact. |
 
 ## Current best
 
-- Approach: GradientBoostingRegressor on IsolationForest-cleaned, SelectKBest-100 features (`src/baseline.py`)
-- CV score: R²=0.57 (5-fold)
+- Approach: GradientBoostingRegressor on SelectKBest-100 features, median impute, no outlier removal (`src/baseline.py`)
+- CV score: R²=0.5065 (5-fold)
 - Public LB score: not yet submitted
