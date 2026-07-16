@@ -1,9 +1,9 @@
 """Baseline pipeline for the Brain Age Prediction Kaggle competition.
 
-Stages: median-impute -> robust-scale -> variance/K-best feature selection
--> regressor. Reports 5-fold CV R^2 for a few candidate regressors, picks
-the best, refits on the full training set, and writes
-submissions/submission.csv.
+Stages: median-impute -> robust-scale -> variance filter -> correlation-pruned
+K-best feature selection -> regressor. Reports 5-fold CV R^2 for a few
+candidate regressors, picks the best, refits on the full training set, and
+writes submissions/submission.csv.
 
 Outlier removal (subtask 1) is deliberately NOT used to filter the
 regressor's training data: notebooks/outlier_comparison.py validated it
@@ -14,13 +14,23 @@ outliers, and dropping rows just loses training signal. We still produce
 the required outlier classification as a standalone artifact
 (data/processed/outlier_labels.csv) since the subtask asks for a
 classification of training samples, not that they must be dropped.
+
+Feature selection uses CorrelationPrunedKBest instead of a plain
+SelectKBest: notebooks/feature_visualization.ipynb found several of the
+top age-correlated features are highly inter-correlated (e.g. x133/x334/
+x465, all |r| > 0.9), so SelectKBest's independent per-feature ranking
+spends part of its k=100 budget on near-duplicates.
+notebooks/feature_selection_corr_cutoff.py validated leak-free (selector
+refit inside each CV fold) that swapping those redundant picks for the
+next-best distinct ones -- while keeping the feature count at 100, not
+cutting it -- improves CV R^2 from 0.5061 to 0.5141.
 """
 import os
 
 import numpy as np
 import pandas as pd
 from sklearn.ensemble import GradientBoostingRegressor, IsolationForest, RandomForestRegressor
-from sklearn.feature_selection import SelectKBest, VarianceThreshold, f_regression
+from sklearn.feature_selection import VarianceThreshold
 from sklearn.impute import SimpleImputer
 from sklearn.linear_model import Ridge
 from sklearn.metrics import r2_score
@@ -28,9 +38,12 @@ from sklearn.model_selection import KFold, cross_val_score
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import RobustScaler
 
+from feature_selection import CorrelationPrunedKBest
+
 RANDOM_STATE = 42
 N_SPLITS = 5
 K_BEST = 100
+CORR_THRESHOLD = 0.9
 OUTLIER_CONTAMINATION = 0.05
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -59,7 +72,7 @@ def build_preprocessor():
         ("impute", SimpleImputer(strategy="median")),
         ("scale", RobustScaler()),
         ("var_thresh", VarianceThreshold(threshold=1e-8)),  # drop constant/near-constant features
-        ("select", SelectKBest(f_regression, k=K_BEST)),
+        ("select", CorrelationPrunedKBest(n_features=K_BEST, corr_threshold=CORR_THRESHOLD)),
     ])
 
 
