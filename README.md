@@ -79,4 +79,4 @@ scripts/submit.sh submissions/my_submission.csv "short description of the approa
 
 - Approach: GradientBoostingRegressor on `CorrelationPrunedKBest`-100 features (correlation-cutoff pruning, threshold 0.9, of the same f_regression ranking SelectKBest uses), median impute, no outlier removal (`src/baseline.py`)
 - CV score: R²=0.5141 (5-fold)
-- Public LB score: not yet submitted
+- Public LB score: R²=0.6382 (submitted 2026-07-16)
