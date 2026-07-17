@@ -34,7 +34,7 @@ from sklearn.preprocessing import RobustScaler
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, REPO_ROOT)
 from src.feature_selection import CorrelationPrunedKBest  # noqa: E402
-from src.sparse_autoencoder import SparseAutoencoderFeatures  # noqa: E402
+from src.rejected_sparse_autoencoder import SparseAutoencoderFeatures  # noqa: E402
 
 RANDOM_STATE = 42
 N_SPLITS = 5
