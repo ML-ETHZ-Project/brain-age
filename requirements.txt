@@ -7,3 +7,5 @@ ipykernel
 kaggle
 xgboost
 lightgbm
+catboost
+torch
