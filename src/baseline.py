@@ -25,9 +25,9 @@ refit inside each CV fold) that swapping those redundant picks for the
 next-best distinct ones -- while keeping the feature count at 100, not
 cutting it -- improves CV R^2 from 0.5061 to 0.5141.
 
-The model is a StackingRegressor (GradientBoosting + LightGBM + Ridge(alpha=10)
-+ KNN(k=15, distance) -> Ridge meta-learner). This combines several
-independent, leak-free-validated improvements:
+The model is a StackingRegressor (GradientBoosting + LightGBM + CatBoost +
+Ridge(alpha=10) + KNN(k=15, distance) -> Ridge meta-learner). This combines
+several independent, leak-free-validated improvements:
   - CorrelationPrunedKBest (this repo) instead of SelectKBest.
   - Stacking GBR+Ridge+KNN (teammate Philippe's philippe/ensembling branch,
     notebooks/stacking_comparison.py there) instead of a single model --
@@ -37,9 +37,14 @@ independent, leak-free-validated improvements:
     LightGBM's leaf-wise tree growth isn't individually stronger than GBR's
     level-wise growth here (solo LightGBM: 0.5106 vs. solo GBR: 0.5141), but
     it's different enough to add real diversity to the stack, lifting CV
-    R^2 to 0.5291 -- the current best, confirmed on the public leaderboard
-    (0.6645, up from 0.6528 for the 3-learner stack, moving in the same
-    direction as the CV gain).
+    R^2 to 0.5291, confirmed on the public leaderboard (0.6645, up from
+    0.6528 for the 3-learner stack, moving in the same direction as the CV
+    gain).
+  - Adding CatBoost as a 5th base learner (notebooks/catboost_experiment.py):
+    CatBoost's ordered boosting + oblivious trees is individually the
+    strongest single model tried yet (solo CatBoost(depth=6, l2_leaf_reg=3):
+    0.5391 vs. solo GBR: 0.5141), and adding it to the stack lifts CV R^2
+    to 0.5379 -- the current best.
 Each base learner is its own full pipeline (impute/scale/clip/variance/
 select/model) and StackingRegressor cross-fits them internally (cv=5) to
 build out-of-fold meta-features, so the meta-learner never trains on a
@@ -87,6 +92,7 @@ if not os.environ.get("_LIGHTGBM_LIBOMP_REEXEC"):
 
 import numpy as np
 import pandas as pd
+from catboost import CatBoostRegressor
 from lightgbm import LGBMRegressor
 from sklearn.ensemble import GradientBoostingRegressor, IsolationForest, StackingRegressor
 from sklearn.feature_selection import VarianceThreshold
@@ -153,6 +159,9 @@ def build_stack():
         ("knn", build_base_pipeline(KNeighborsRegressor(n_neighbors=15, weights="distance"))),
         ("lgbm", build_base_pipeline(
             LGBMRegressor(num_leaves=15, min_child_samples=30, random_state=RANDOM_STATE, verbosity=-1))),
+        ("catboost", build_base_pipeline(
+            CatBoostRegressor(depth=6, l2_leaf_reg=3.0, random_state=RANDOM_STATE,
+                               verbose=False, allow_writing_files=False))),
     ]
     return StackingRegressor(estimators=estimators, final_estimator=Ridge(alpha=1.0), cv=N_SPLITS, n_jobs=-1)
 
@@ -188,14 +197,14 @@ def main():
           f"(folds: {np.round(solo_scores, 3)})")
 
     stack_scores = cross_val_score(build_stack(), X_train, y_train, cv=kf, scoring="r2", n_jobs=1)
-    print(f"  StackingRegressor (GBR+LightGBM+Ridge+KNN -> Ridge): R^2 = {stack_scores.mean():.4f} "
+    print(f"  StackingRegressor (GBR+LightGBM+CatBoost+Ridge+KNN -> Ridge): R^2 = {stack_scores.mean():.4f} "
           f"+/- {stack_scores.std():.4f}  (folds: {np.round(stack_scores, 3)})")
     print(
-        "(Combines this branch's CorrelationPrunedKBest, philippe/ensembling's stacking ensemble, and "
-        "LightGBM as a 4th base learner -- see module docstring and the README experiment log for the "
-        "leak-free ablations behind each choice. Outlier removal was tried and validated leak-free in "
-        "notebooks/outlier_comparison.py: it hurts R^2 at every contamination level, so it is NOT used "
-        "to filter training data here.)"
+        "(Combines this branch's CorrelationPrunedKBest, philippe/ensembling's stacking ensemble, "
+        "LightGBM as a 4th base learner, and CatBoost as a 5th -- see module docstring and the README "
+        "experiment log for the leak-free ablations behind each choice. Outlier removal was tried and "
+        "validated leak-free in notebooks/outlier_comparison.py: it hurts R^2 at every contamination "
+        "level, so it is NOT used to filter training data here.)"
     )
 
     # Subtask 1 deliverable: classify (not remove) training-row outliers, using the same
