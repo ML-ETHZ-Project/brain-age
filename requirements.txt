@@ -7,3 +7,7 @@ ipykernel
 kaggle
 xgboost
 lightgbm
+catboost
+optuna
+statsmodels
+torch
