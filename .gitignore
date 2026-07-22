@@ -22,6 +22,7 @@ venv/
 *.pt
 *.h5
 checkpoints/
+catboost_info/
 
 # os / editor
 .DS_Store
